@@ -104,12 +104,12 @@ function SectorWiseFundAllocation() {
 					custom: function ({ seriesIndex, dataPointIndex, w }) {
 						const data =
 							w.config.series[seriesIndex].data[dataPointIndex];
-						return `<div class="apexcharts-tooltip-title">${data.x}</div>
-								<div>Market Weight: ${(
+						return `<div class="apexcharts-tooltip-title text-black font-bold">${data.x}</div>
+								<div class="text-black px-2 mt-2">Market Weight: ${(
 									(data.y / 1000000) *
 									100
 								).toFixed(2)}%</div>
-								<div>Rating: ${
+								<div class="text-black px-2 mb-2">Rating: ${
 									topIndustries.rating[
 										Object.entries(topIndustries.name).find(
 											(item) => item[1] === data.x
