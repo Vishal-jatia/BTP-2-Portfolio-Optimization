@@ -1,9 +1,11 @@
+import uvicorn
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from yahooquery import search
 from fastapi.responses import JSONResponse
 import yfinance as yf
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from pydantic import BaseModel
 from sklearn.preprocessing import MinMaxScaler
@@ -14,6 +16,24 @@ from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from pymoo.util.ref_dirs import get_reference_directions
 from typing import Dict, List
+
+from app.services.sentiment_analysis import (
+    get_sentiment_scores_for_tickers,
+    black_litterman_with_sentiment,
+    predict_with_sentiment_ann,
+    optimize_with_bl_and_moo
+)
+
+from app.utils.interpretation import (
+    format_interpretation_prompt,
+    generate_interpretation_openrouter
+)
+
+from app.utils.metrics import compute_portfolio_metrics
+from app.utils.pareto_plot import plot_pareto_front
+from app.utils.logger import logger
+from app.utils.serialize_json import make_json_serializable
+
 
 app = FastAPI()
 
@@ -185,6 +205,59 @@ def get_top_companies(industry_symbol: str) -> List[str]:
     
     except Exception:
         return []
+class SentimentRequest(BaseModel):
+    tickers: List[str]
+    duration: str = "1y"
+
+@app.post("/sentiment-optimized-allocation")
+def sentiment_optimized_allocation(request: SentimentRequest):
+    logger.info("Sentiment allocation requested")
+
+    tickers = request.tickers
+    duration = request.duration
+    
+    data = fetch_historical_data(tickers)
+    prices_df = pd.DataFrame({ticker: pd.Series(prices) for ticker, prices in data.items()})
+
+    sentiment_scores = get_sentiment_scores_for_tickers(tickers)
+    logger.debug(f"Sentiment scores: {sentiment_scores}")
+
+    models = train_ann(data)
+    future_prices = predict_with_sentiment_ann(models, data, sentiment_scores, duration)
+
+    # Run optimization and capture res for plotting
+    allocation, ret_bl, res = optimize_with_bl_and_moo(future_prices, prices_df, sentiment_scores, return_res=True)
+
+    # Portfolio metrics
+    metrics = compute_portfolio_metrics(prices_df, allocation)
+
+    # Pareto front
+    pareto_plot_base64 = plot_pareto_front(res)
+
+    # Explainability
+    sorted_by_risk = sorted(future_prices.items(), key=lambda x: np.std(x[1]))
+    lowest_risk_ticker = sorted_by_risk[0][0]
+    logger.info(f"High weight in {lowest_risk_ticker} due to lowest predicted variance from ANN simulation")
+    
+    prompt = format_interpretation_prompt(allocation, sentiment_scores, ret_bl, future_prices)
+    interpretation = generate_interpretation_openrouter(prompt)
+    response = {
+        "allocation": allocation,
+        "black_litterman_returns": ret_bl,
+        "sentiment_scores": sentiment_scores,
+        "metrics": metrics,
+        "pareto_plot_base64": pareto_plot_base64,
+        "explanation": f"High weight in {lowest_risk_ticker} due to lowest predicted variance from ANN simulation",
+        "llm_interpretation": interpretation
+    }
+    return JSONResponse(content=make_json_serializable(response), status_code=200)
+
+
+
+
+@app.get("/health")
+def health_check():
+    return "Working"
 
 @app.post("/top-industries")
 def get_top_industries(request: SectorRequest):
@@ -220,5 +293,6 @@ def search_stocks(q: str = Query(..., min_length=1)):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    config = uvicorn.Config("app.main:app", port=80, log_level="info")
+    server = uvicorn.Server(config)
+    server.run()

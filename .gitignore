@@ -1,3 +1,4 @@
 backend/env
 frontend/node_modules
 .qodo
+backend/.env

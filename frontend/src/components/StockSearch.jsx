@@ -9,7 +9,7 @@ const StockSearch = ({setSelectedStocks}) => {
     if (!inputValue) return;
 
     try {
-      const response = await fetch(`http://localhost:80/search?q=${inputValue}`);
+      const response = await fetch(`http://localhost:${import.meta.env.VITE_PORT}/search?q=${inputValue}`);
       const data = await response.json();
 
       if (data.results && data.results.quotes) {

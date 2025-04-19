@@ -27,7 +27,7 @@ function BestFundAllocation() {
 		const tickers = selectedStocks.map((stock) => stock.value);
 		try {
 			const response = await axios.post(
-				"http://localhost:80/optimize-portfolio",
+				`http://localhost:${import.meta.env.VITE_PORT}/optimize-portfolio`,
 				{ tickers }
 			);
 			console.log(response);
@@ -46,7 +46,7 @@ function BestFundAllocation() {
 		const tickers = selectedStocks.map((stock) => stock.value);
 		try {
 			const response = await axios.post(
-				"http://localhost:80/historical-data",
+				`http://localhost:${import.meta.env.VITE_PORT}/historical-data`,
 				{ tickers }
 			);
 			setHistoricalData(response.data);

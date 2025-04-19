@@ -44,7 +44,7 @@ function SectorWiseFundAllocation() {
 		setLoading(true);
 		try {
 			const response = await axios.post(
-				"http://localhost:80/top-industries",
+				`http://localhost:${import.meta.env.VITE_PORT}/top-industries`,
 				{ sector: selectedSector.value }
 			);
 			setTopIndustries(response.data.industry);
