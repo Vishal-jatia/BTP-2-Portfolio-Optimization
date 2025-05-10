@@ -4,14 +4,17 @@ import { createChart, BaselineSeries } from "lightweight-charts";
 import { ArrowRight } from "lucide-react";
 import StockSearch from "../components/StockSearch";
 import { Button } from "../components/commons/Button";
-
+// import { Pie } from "react-chartjs-2";
+// import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
+import { PieChart, Pie, Cell, Legend, Tooltip } from 'recharts';
+// ChartJS.register(ArcElement, Tooltip, Legend);
 function BestFundAllocation() {
 	const [selectedStocks, setSelectedStocks] = useState([]);
 	const [historicalData, setHistoricalData] = useState({});
 	const [futurePrices, setFuturePrices] = useState({});
 	const [activeStock, setActiveStock] = useState(null);
 	const [allocations, setAllocations] = useState(null);
-    const [isLoading, setIsLoading] = useState(false)
+	const [isLoading, setIsLoading] = useState(false);
 	const chartContainerRef = useRef(null);
 	let chart;
 
@@ -22,12 +25,14 @@ function BestFundAllocation() {
 	}, [activeStock, historicalData, futurePrices]);
 
 	const handleBestAllocation = async () => {
-        setIsLoading(true)
+		setIsLoading(true);
 		if (selectedStocks.length === 0) return;
 		const tickers = selectedStocks.map((stock) => stock.value);
 		try {
 			const response = await axios.post(
-				`http://localhost:${import.meta.env.VITE_PORT}/optimize-portfolio`,
+				`http://localhost:${
+					import.meta.env.VITE_PORT
+				}/optimize-portfolio`,
 				{ tickers }
 			);
 			console.log(response);
@@ -37,7 +42,7 @@ function BestFundAllocation() {
 		} catch (error) {
 			console.error("Error optimizing portfolio:", error);
 		}
-        setIsLoading(false)
+		setIsLoading(false);
 	};
 
 	const fetchHistoricalData = async () => {
@@ -123,6 +128,40 @@ function BestFundAllocation() {
 			}
 		}
 	};
+	const COLORS = ["#0088FE", "#00C49F", "#FFBB28"];
+
+	const formatAllocationData = (allocation) => {
+		return Object.entries(allocation).map(([asset, value]) => ({
+			name: asset,
+			value: parseFloat((value * 100).toFixed(6)), // Convert to %
+		}));
+	};
+
+	const PieChartCard = ({ title, data }) => (
+		<div className="p-4">
+			<h2 className="text-center font-semibold">{title}</h2>
+			<PieChart width={300} height={250}>
+				<Pie
+					dataKey="value"
+					isAnimationActive={false}
+					data={data}
+					cx="50%"
+					cy="50%"
+					outerRadius={80}
+					label={({ name, value }) => `${name}: ${value.toFixed(2)}%`}
+				>
+					{data.map((_, index) => (
+						<Cell
+							key={`cell-${index}`}
+							fill={COLORS[index % COLORS.length]}
+						/>
+					))}
+				</Pie>
+				<Tooltip />
+				<Legend />
+			</PieChart>
+		</div>
+	);
 
 	return (
 		<div className="flex flex-col items-center p-8 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 min-h-screen space-y-6 text-white">
@@ -169,7 +208,11 @@ function BestFundAllocation() {
 				className="flex items-center justify-center bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-lg shadow-lg transition-all space-x-2"
 				onClick={handleBestAllocation}
 			>
-				<span>{isLoading ? "Fetching optimized results ...":"Find Best Allocation"}</span>
+				<span>
+					{isLoading
+						? "Fetching optimized results ..."
+						: "Find Best Allocation"}
+				</span>
 				<ArrowRight className="h-5 w-5" />
 			</button>
 
@@ -211,6 +254,31 @@ function BestFundAllocation() {
 								</div>
 							)
 					)}
+					<div className="mt-6">
+						<h3 className="text-xl font-semibold text-white mb-2">
+							Allocation Breakdown
+						</h3>
+						<div className="flex flex-wrap justify-center gap-4">
+							<PieChartCard
+								title="NSGA-II Allocation"
+								data={formatAllocationData(
+									allocations.nsga2.allocation
+								)}
+							/>
+							<PieChartCard
+								title="MOEA/D Allocation"
+								data={formatAllocationData(
+									allocations.moead.allocation
+								)}
+							/>
+							<PieChartCard
+								title="NSGA-III Allocation"
+								data={formatAllocationData(
+									allocations.nsga3.allocation
+								)}
+							/>
+						</div>
+					</div>
 				</div>
 			)}
 		</div>
