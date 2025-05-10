@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from yahooquery import search
+from yahooquery import search as yq_search
 from fastapi.responses import JSONResponse
 import yfinance as yf
 import numpy as np
@@ -48,21 +48,32 @@ app.add_middleware(
 class TickerRequest(BaseModel):
     tickers: list[str]
 
+import yfinance as yf
+
 def fetch_historical_data(tickers):
     data = {}
+    logger.info("List of tickers to fetch historical data")
+    logger.debug(tickers)
     for ticker in tickers:
-        stock = yf.Ticker(ticker)
-        history = stock.history(period="5y")
-        data[ticker] = history['Close'].values
+        try:
+            stock = yf.Ticker(ticker)
+            history = stock.history(period="5y")
+            if history.empty:
+                print(f"Warning: No data found for {ticker}")
+                continue
+            data[ticker] = history
+        except Exception as e:
+            print(f"Error fetching data for {ticker}: {e}")
     return data
+
 
 def train_ann(data):
     models = {}
     for ticker, prices in data.items():
         X, y = [], []
-        for i in range(len(prices) - 10):
-            X.append(prices[i:i+10])
-            y.append(prices[i+10])
+        for i in range(len(prices["Close"]) - 10):
+            X.append(prices["Close"][i:i+10])
+            y.append(prices["Close"][i+10])
         X, y = np.array(X), np.array(y)
         
         model = tf.keras.Sequential([
@@ -211,46 +222,78 @@ class SentimentRequest(BaseModel):
 
 @app.post("/sentiment-optimized-allocation")
 def sentiment_optimized_allocation(request: SentimentRequest):
-    logger.info("Sentiment allocation requested")
+    logger.info("Sentiment-optimized allocation request received")
 
     tickers = request.tickers
     duration = request.duration
-    
-    data = fetch_historical_data(tickers)
-    prices_df = pd.DataFrame({ticker: pd.Series(prices) for ticker, prices in data.items()})
+    logger.debug(f"Received tickers: {tickers} | Duration: {duration}")
 
-    sentiment_scores = get_sentiment_scores_for_tickers(tickers)
-    logger.debug(f"Sentiment scores: {sentiment_scores}")
+    try:
+        # Fetch historical data
+        data = fetch_historical_data(tickers)
+        prices_df = pd.DataFrame({ticker: pd.Series(prices["Close"]) for ticker, prices in data.items()})
+        logger.info(f"Fetched historical data for {len(tickers)} tickers")
+    except Exception as e:
+        logger.error(f"Error fetching historical data: {e}")
+        return JSONResponse(content={"error": "Failed to fetch historical data"}, status_code=500)
 
-    models = train_ann(data)
-    future_prices = predict_with_sentiment_ann(models, data, sentiment_scores, duration)
+    try:
+        sentiment_scores = get_sentiment_scores_for_tickers(tickers)
+        logger.debug(f"Sentiment scores: {sentiment_scores}")
+    except Exception as e:
+        logger.error(f"Error retrieving sentiment scores: {e}")
+        return JSONResponse(content={"error": "Failed to retrieve sentiment scores"}, status_code=500)
 
-    # Run optimization and capture res for plotting
-    allocation, ret_bl, res = optimize_with_bl_and_moo(future_prices, prices_df, sentiment_scores, return_res=True)
+    try:
+        models = train_ann(data)
+        predicted_prices = predict_with_sentiment_ann(models, data, sentiment_scores, duration)
+    except Exception as e:
+        logger.error(f"ANN prediction failed: {e}")
+        return JSONResponse(content={"error": "ANN prediction failed"}, status_code=500)
 
-    # Portfolio metrics
-    metrics = compute_portfolio_metrics(prices_df, allocation)
+    try:
+        allocation, bl_returns, res = optimize_with_bl_and_moo(predicted_prices, prices_df, sentiment_scores, return_res=True)
+        metrics = compute_portfolio_metrics(prices_df, allocation)
+        logger.info("Optimization and metric computation complete")
+    except Exception as e:
+        logger.error(f"Optimization or metric computation failed: {e}")
+        return JSONResponse(content={"error": "Optimization or metric computation failed"}, status_code=500)
 
-    # Pareto front
-    pareto_plot_base64 = plot_pareto_front(res)
+    try:
+        pareto_plot_base64 = plot_pareto_front(res)
+    except Exception as e:
+        logger.warning(f"Pareto plot generation failed: {e}")
+        pareto_plot_base64 = None
 
-    # Explainability
-    sorted_by_risk = sorted(future_prices.items(), key=lambda x: np.std(x[1]))
-    lowest_risk_ticker = sorted_by_risk[0][0]
-    logger.info(f"High weight in {lowest_risk_ticker} due to lowest predicted variance from ANN simulation")
-    
-    prompt = format_interpretation_prompt(allocation, sentiment_scores, ret_bl, future_prices)
-    interpretation = generate_interpretation_openrouter(prompt)
+    try:
+        sorted_by_risk = sorted(predicted_prices.items(), key=lambda x: np.std(x[1]))
+        lowest_risk_ticker = sorted_by_risk[0][0]
+        explanation = f"High weight in {lowest_risk_ticker} due to lowest predicted variance from ANN simulation"
+        logger.info(explanation)
+    except Exception as e:
+        explanation = "Could not compute explanation due to prediction issues"
+        logger.warning(explanation)
+
+    try:
+        logger.info("Generating LLM-based interpretation via OpenRouter")
+        prompt = format_interpretation_prompt(allocation, sentiment_scores, bl_returns, predicted_prices)
+        interpretation = generate_interpretation_openrouter(prompt)
+    except Exception as e:
+        logger.warning(f"LLM interpretation failed: {e}")
+        interpretation = None
+
     response = {
         "allocation": allocation,
-        "black_litterman_returns": ret_bl,
+        "black_litterman_returns": bl_returns,
         "sentiment_scores": sentiment_scores,
         "metrics": metrics,
         "pareto_plot_base64": pareto_plot_base64,
-        "explanation": f"High weight in {lowest_risk_ticker} due to lowest predicted variance from ANN simulation",
+        "explanation": explanation,
         "llm_interpretation": interpretation
     }
+
     return JSONResponse(content=make_json_serializable(response), status_code=200)
+
 
 
 
@@ -285,12 +328,44 @@ def get_historical_data(request: TickerRequest):
 @app.get("/search")
 def search_stocks(q: str = Query(..., min_length=1)):
     try:
-        results = search(q)
-        if not results:
-            raise HTTPException(status_code=404, detail="No results found")
-        return {"results": results}
+        # First attempt with yahooquery
+        yq_result = yq_search(q)
+        if yq_result and 'quotes' in yq_result and yq_result['quotes']:
+            return {"source": "yahooquery", "results": yq_result['quotes']}
+        else:
+            raise Exception("No results from yahooquery")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Log or print e if needed
+        try:
+            # Fallback to yfinance
+            ticker = yf.Ticker(q.upper())
+            info = ticker.info
+            if 'symbol' in info:
+                return {
+                    "source": "yfinance",
+                    "results": [{
+                        "symbol": info.get("symbol"),
+                        "shortName": info.get("shortName"),
+                        "longName": info.get("longName"),
+                        "exchange": info.get("exchange"),
+                        "quoteType": info.get("quoteType"),
+                    }]
+                }
+            else:
+                raise HTTPException(status_code=404, detail="No results found from either source")
+        except Exception as fallback_error:
+            raise HTTPException(status_code=503, detail="Both Yahoo sources failed: " + str(fallback_error))
+
+# def search_stocks(q: str = Query(..., min_length=1)):
+#     try:
+#         results = search(q)
+#         if not results or 'quotes' not in results:
+#             raise HTTPException(status_code=404, detail="No results found")
+#         return {"results": results['quotes']}
+#     except Exception as e:
+#         if "Failed to obtain crumb" in str(e):
+#             raise HTTPException(status_code=503, detail="Service temporarily unavailable due to Yahoo Finance access issues.")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     config = uvicorn.Config("app.main:app", port=80, log_level="info")

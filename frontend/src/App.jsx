@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Router } from "react-router";
 import { createChart, BaselineSeries } from "lightweight-charts";
 import StockSearch from "./components/StockSearch";
 import BestFundAllocation from "./pages/BestFundAllocation";
+import SentimentBasedAllocation from "./pages/SentimentBasedAllocation";
 import SectorWiseFundAllocation from "./pages/SectorWiseFundAllocation";
 import Home from "./pages/Home";
 
@@ -14,6 +15,7 @@ function App() {
 			{/* Add additional routes here */}
 			<Route path="/market-analysis" element={<BestFundAllocation />} />
 			<Route path="/sector-allocation" element={<SectorWiseFundAllocation />} />
+			<Route path="/portfolio-optimization" element={<SentimentBasedAllocation />} />
 		</Routes>
 	);
 }

@@ -27,6 +27,33 @@ const StockSearch = ({setSelectedStocks}) => {
     }
   };
 
+  const loadStaticStockOptions = () => {
+    const staticStocks = [
+      { shortname: "Apple Inc.", symbol: "AAPL" },
+      { shortname: "Microsoft Corporation", symbol: "MSFT" },
+      { shortname: "Tesla Inc.", symbol: "TSLA" },
+      { shortname: "AT&T Inc.", symbol: "T" },
+      { shortname: "Amazon.com Inc.", symbol: "AMZN" },
+      { shortname: "Alphabet Inc. (Class A)", symbol: "GOOGL" },
+      { shortname: "NVIDIA Corporation", symbol: "NVDA" },
+      { shortname: "Meta Platforms Inc.", symbol: "META" },
+      { shortname: "Netflix Inc.", symbol: "NFLX" },
+      { shortname: "Intel Corporation", symbol: "INTC" },
+      { shortname: "Adobe Inc.", symbol: "ADBE" },
+      { shortname: "PayPal Holdings Inc.", symbol: "PYPL" },
+      { shortname: "Berkshire Hathaway Inc.", symbol: "BRK-B" },
+      { shortname: "Coca-Cola Company", symbol: "KO" }
+    ];
+  
+    setOptions(
+      staticStocks.map((stock) => ({
+        label: `${stock.shortname} (${stock.symbol})`,
+        value: stock.symbol,
+      }))
+    );
+  };
+  
+
   return (
     <div style={{ width: "400px", margin: "50px auto", color: "black" }}>
       <h2 className="text-white">Search for Stocks</h2>
@@ -34,7 +61,8 @@ const StockSearch = ({setSelectedStocks}) => {
         options={options}
         onInputChange={(value) => {
           setQuery(value);
-          fetchStocks(value);
+          // fetchStocks(value);
+          loadStaticStockOptions(); 
         }}
         onChange={(selectedOption) => {
           // Update the selectedStocks state by adding the new selection(s)

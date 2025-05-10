@@ -105,6 +105,27 @@ function Home() {
 							</Link>
 						</CardContent>
 					</Card>
+
+					<Card className="bg-gray-900 border border-gray-700 shadow-lg hover:scale-105 transition-transform p-6 rounded-xl">
+						<CardHeader className="pb-2 flex flex-col items-center">
+							<Briefcase className="h-12 w-12 text-blue-500 mb-3" />
+							<CardTitle className="text-xl font-bold">
+								Portfolio Optimization
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="text-center">
+							<CardDescription className="text-gray-400 text-md">
+								Use sentiment analysis to better optimize
+								your portfolio allocation.
+							</CardDescription>
+							<Link
+								to="/portfolio-optimization"
+								className="text-sm text-blue-400 flex items-center justify-center mt-4 hover:underline"
+							>
+								Explore <ArrowRight className="ml-1 h-4 w-4" />
+							</Link>
+						</CardContent>
+					</Card>
 				</div>
 			</section>
 		</div>

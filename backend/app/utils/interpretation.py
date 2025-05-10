@@ -1,6 +1,11 @@
 import requests
 import os
 import numpy as np
+from dotenv import load_dotenv
+
+from app.utils.logger import logger
+
+load_dotenv()
 def format_interpretation_prompt(allocation, sentiment_scores, bl_returns, future_prices):
     volatility = {t: round(np.std(p), 4) for t, p in future_prices.items()}
 
@@ -15,9 +20,10 @@ def format_interpretation_prompt(allocation, sentiment_scores, bl_returns, futur
 
     return prompt
 def generate_interpretation_openrouter(prompt, model="mistralai/mistral-7b-instruct"):
-    api_key = "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"
+    # api_key = "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"
 
-    # api_key = os.getenv("OPENROUTER_API_KEY")  # store securely or hardcode temporarily
+    api_key = os.getenv("OPENROUTER_API_KEY")  # store securely or hardcode temporarily
+    logger.debug(f"API key = {api_key}")
     headers = {
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": "http://localhost",  # or your frontend domain

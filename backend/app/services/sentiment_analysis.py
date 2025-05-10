@@ -139,7 +139,7 @@ def predict_with_sentiment_ann(models, data, sentiment_scores, duration="1y"):
     prediction_days = duration_map.get(duration, 365)
 
     for ticker, model in models.items():
-        last_10_days = np.array(data[ticker][-10:]).reshape(1, -1)
+        last_10_days = np.array(data[ticker]["Close"][-10:]).reshape(1, -1)
         future_preds = []
         sentiment_factor = sentiment_scores.get(ticker, 0)
 
